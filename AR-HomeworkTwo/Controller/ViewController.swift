@@ -10,7 +10,7 @@ import UIKit
 import SceneKit
 import ARKit
 
-class ViewController: UIViewController, ARSCNViewDelegate {
+class ViewController: UIViewController {
     
     // MARK: - Outlets
     @IBOutlet var sceneView: ARSCNView!
@@ -41,36 +41,6 @@ class ViewController: UIViewController, ARSCNViewDelegate {
 
 // MARK: - Extension One
 extension ViewController {
-    
-    // MARK: - Methods
-    private func addHoop(result: ARHitTestResult) {
-        let hoopScene = SCNScene(named: "art.scnassets/Hoop.scn")
-        
-        guard let hoopNode = hoopScene?.rootNode.childNode(withName: "Hoop", recursively: false) else { return }
-        
-        backboardTexture: if let backboardImage = UIImage(named: "art.scnassets/backboard.jpg") {
-            guard let backboardNode = hoopNode.childNode(withName: "backboard", recursively: false) else {
-                break backboardTexture
-            }
-            guard let backboard = backboardNode.geometry as? SCNBox else { break backboardTexture }
-            backboard.firstMaterial?.diffuse.contents = backboardImage
-        }
-        
-        hoopNode.simdTransform = result.worldTransform
-        hoopNode.eulerAngles = SCNVector3(0, 0, 0)
-        
-        sceneView.scene.rootNode.enumerateChildNodes { node, _ in
-            if node.name == "Wall" {
-                node.removeFromParentNode()
-            }
-        }
-        sceneView.scene.rootNode.addChildNode(hoopNode)
-        isHoopPlaced = true
-    }
-}
-
-// MARK: - Extension Two
-extension ViewController {
 
     @IBAction func screenTaped(_ sender: UITapGestureRecognizer) {
         if isHoopPlaced {
@@ -84,8 +54,8 @@ extension ViewController {
     }
 }
 
-// MARK: - Extension Three
-extension ViewController {
+// MARK: - Extension Two
+extension ViewController: ARSCNViewDelegate {
     func renderer(_ renderer: SCNSceneRenderer, didUpdate node: SCNNode, for anchor: ARAnchor) {
         guard let anchor = anchor as? ARPlaneAnchor else { return }
         guard !isHoopPlaced else { return }
@@ -105,5 +75,35 @@ extension ViewController {
         node.addChildNode(planeNode)
         planeCounter += 1
         print(#line, "Planes added: \(planeCounter)")
+    }
+}
+
+// MARK: - Extension Three
+extension ViewController {
+    
+    // MARK: - Methods
+    private func addHoop(result: ARHitTestResult) {
+        let hoopScene = SCNScene(named: "art.scnassets/Hoop.scn")
+        
+        guard let hoopNode = hoopScene?.rootNode.childNode(withName: "Hoop", recursively: false) else { return }
+        
+        backboardTexture: if let backboardImage = UIImage(named: "art.scnassets/backboard.jpg") {
+            guard let backboardNode = hoopNode.childNode(withName: "backboard", recursively: false) else {
+                break backboardTexture
+            }
+            guard let backboard = backboardNode.geometry as? SCNBox else { break backboardTexture }
+            backboard.firstMaterial?.diffuse.contents = backboardImage
+        }
+        
+        hoopNode.simdTransform = result.worldTransform
+        hoopNode.eulerAngles.x -= .pi / 2
+        
+        sceneView.scene.rootNode.enumerateChildNodes { node, _ in
+            if node.name == "Wall" {
+                node.removeFromParentNode()
+            }
+        }
+        sceneView.scene.rootNode.addChildNode(hoopNode)
+        isHoopPlaced = true
     }
 }
