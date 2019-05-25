@@ -14,15 +14,24 @@ class ViewController: UIViewController {
     
     // MARK: - Outlets
     @IBOutlet var sceneView: ARSCNView!
+    @IBOutlet var topScore: UILabel!
+    @IBOutlet var score: UILabel!
     
     // MARK: - Vars
     var planeCounter = 0
+    var topsScore = 0
+    var scores = 0
     var isHoopPlaced = false
+    var ballCollision = false
+    var resultCollision = false
     
     // MARK: - Override methods
     override func viewDidLoad() {
         super.viewDidLoad()
         sceneView.delegate = self
+        
+        score.isHidden = true
+        topScore.isHidden = true
     }
     
     override func viewWillAppear(_ animated: Bool) {
@@ -44,7 +53,7 @@ extension ViewController {
 
     @IBAction func screenTaped(_ sender: UITapGestureRecognizer) {
         if isHoopPlaced {
-            
+            createBasketball()
         } else {
             let location = sender.location(in: sceneView)
             
@@ -86,6 +95,7 @@ extension ViewController {
         let hoopScene = SCNScene(named: "art.scnassets/Hoop.scn")
         
         guard let hoopNode = hoopScene?.rootNode.childNode(withName: "Hoop", recursively: false) else { return }
+        guard let goalNode = hoopScene?.rootNode.childNode(withName: "Goal", recursively: false) else { return }
         
         backboardTexture: if let backboardImage = UIImage(named: "art.scnassets/backboard.jpg") {
             guard let backboardNode = hoopNode.childNode(withName: "backboard", recursively: false) else {
@@ -95,8 +105,17 @@ extension ViewController {
             backboard.firstMaterial?.diffuse.contents = backboardImage
         }
         
+        goalNode.simdTransform = result.worldTransform
+        goalNode.name = "goal"
+        goalNode.eulerAngles.x -= .pi / 2
+        goalNode.scale = SCNVector3 (0.7, 0.7, 0.7)
+        goalNode.physicsBody = SCNPhysicsBody(type: .static, shape: SCNPhysicsShape(node: goalNode, options: [SCNPhysicsShape.Option.type: SCNPhysicsShape.ShapeType.concavePolyhedron]))
+        
         hoopNode.simdTransform = result.worldTransform
+        hoopNode.name = "ring"
         hoopNode.eulerAngles.x -= .pi / 2
+        hoopNode.scale = SCNVector3 (0.7, 0.7, 0.7)
+        hoopNode.physicsBody = SCNPhysicsBody(type: .static, shape: SCNPhysicsShape(node: hoopNode, options: [SCNPhysicsShape.Option.type: SCNPhysicsShape.ShapeType.concavePolyhedron]))
         
         sceneView.scene.rootNode.enumerateChildNodes { node, _ in
             if node.name == "Wall" {
@@ -104,6 +123,71 @@ extension ViewController {
             }
         }
         sceneView.scene.rootNode.addChildNode(hoopNode)
+        sceneView.scene.rootNode.addChildNode(goalNode)
+        
         isHoopPlaced = true
+        score.isHidden = false
+        topScore.isHidden = false
+        
+        stopDetectingPlane()
+    }
+    
+    func stopDetectingPlane() {
+        guard let configuration = sceneView.session.configuration as? ARWorldTrackingConfiguration else { return }
+        
+        configuration.planeDetection = []
+        sceneView.session.run(configuration)
+    }
+    
+   func createBasketball() {
+    guard let frame = sceneView.session.currentFrame else { return }
+    
+    let ball = SCNNode(geometry: SCNSphere(radius: 0.2))
+    ball.geometry?.firstMaterial?.diffuse.contents = UIImage(named: "art.scnassets/basketball.jpg")
+    ball.name = "ball"
+    
+    let cameraTransform = SCNMatrix4(frame.camera.transform)
+    ball.transform = cameraTransform
+    
+    let physicsBody = SCNPhysicsBody(type: .dynamic, shape: SCNPhysicsShape(node: ball))
+    ball.physicsBody = physicsBody
+    
+    let power = Float(10)
+    let x = -cameraTransform.m31 * power
+    let y = -cameraTransform.m32 * power
+    let z = -cameraTransform.m33 * power
+    let force = SCNVector3(x, y, z)
+    
+    ball.physicsBody?.applyForce(force, asImpulse: true)
+    
+    sceneView.scene.rootNode.addChildNode(ball)
+    }
+    
+    func renderer(_ renderer: SCNSceneRenderer, updateAtTime time: TimeInterval) {
+        //TODO удалить лишние мячи (по прошествии времени, либо по опредленному количеству)
+    }
+}
+
+extension ViewController: SCNPhysicsContactDelegate {
+    func physicsWorld(_ world: SCNPhysicsWorld, didBegin contact: SCNPhysicsContact) {
+        
+        if ballCollision == false {
+            if (contact.nodeA.name! == "ball" && contact.nodeB.name! == "goal") {
+                ballCollision.toggle()
+            }
+        }
+        
+        if ballCollision == true && resultCollision == false {
+            if contact.nodeA.name! == "ball" && contact.nodeB.name! == "goal" {
+                ballCollision.toggle()
+                resultCollision.toggle()
+                
+                scores += 1
+                
+                DispatchQueue.main.async {
+                    self.score.text = "Scores: \(self.scores)"
+                }
+            }
+        }
     }
 }
