@@ -10,6 +10,13 @@ import UIKit
 import SceneKit
 import ARKit
 
+enum collisions: Int {
+    case none = 0
+    case ball = 1
+    case start = 2
+    case end = 3
+}
+
 class ViewController: UIViewController {
     
     // MARK: - Outlets
@@ -28,9 +35,10 @@ class ViewController: UIViewController {
     // MARK: - Override methods
     override func viewDidLoad() {
         super.viewDidLoad()
-        sceneView.debugOptions = [.showFeaturePoints]
         
         sceneView.delegate = self
+        sceneView.scene.physicsWorld.contactDelegate = self
+        
         score.isHidden = true
         topScore.isHidden = true
     }
@@ -54,31 +62,36 @@ extension ViewController {
     
     // MARK: - Methods
     private func addHoop(result: ARHitTestResult) {
-        let hoopScene = SCNScene(named: "SupportingFiles/art.scnassets/Hoop.scn")
+        let hoopScene = SCNScene(named: "art.scnassets/Hoop.scn")
         
         guard let hoopNode = hoopScene?.rootNode.childNode(withName: "Hoop", recursively: false) else { return }
-        guard let goalNode = hoopScene?.rootNode.childNode(withName: "Goal", recursively: false) else { return }
+        guard let backboardNode = hoopNode.childNode(withName: "backboard", recursively: false) else { return }
+        guard let ringNode = backboardNode.childNode(withName: "ring", recursively: false) else { return }
+        guard let goalNode = ringNode.childNode(withName: "goal", recursively: false) else { return }
         
-        backboardTexture: if let backboardImage = UIImage(named: "SupportingFiles/art.scnassets/backboard.jpg") {
-            guard let backboardNode = hoopNode.childNode(withName: "backboard", recursively: false) else {
-                break backboardTexture
-            }
+        backboardTexture: if let backboardImage = UIImage(named: "art.scnassets/backboard.jpg") {
             guard let backboard = backboardNode.geometry as? SCNBox else { break backboardTexture }
             backboard.firstMaterial?.diffuse.contents = backboardImage
         }
         
-        goalNode.simdTransform = result.worldTransform
+        hoopNode.simdTransform = result.worldTransform
+        hoopNode.eulerAngles.x -= .pi / 2
+        hoopNode.physicsBody = SCNPhysicsBody(type: .static, shape: SCNPhysicsShape(node: hoopNode, options: [SCNPhysicsShape.Option.type: SCNPhysicsShape.ShapeType.concavePolyhedron]))
+        
         goalNode.name = "goal"
-        goalNode.eulerAngles.x -= .pi / 2
-        goalNode.scale = SCNVector3 (0.5, 0.5, 0.5)
+        goalNode.geometry?.firstMaterial?.diffuse.contents = UIColor.clear
         goalNode.physicsBody = SCNPhysicsBody(type: .static, shape: SCNPhysicsShape(node: goalNode, options: [SCNPhysicsShape.Option.type: SCNPhysicsShape.ShapeType.concavePolyhedron]))
         
-        hoopNode.simdTransform = result.worldTransform
-        hoopNode.name = "ring"
-        hoopNode.eulerAngles.x -= .pi / 2
-        hoopNode.scale = SCNVector3 (0.7, 0.7, 0.7)
-        hoopNode.physicsBody = SCNPhysicsBody(type: .static, shape: SCNPhysicsShape(node: hoopNode, options: [SCNPhysicsShape.Option.type: SCNPhysicsShape.ShapeType.concavePolyhedron]))
-    
+        ringNode.name = "ring"
+        ringNode.physicsBody = SCNPhysicsBody(type: .static, shape: SCNPhysicsShape(node: ringNode, options: [SCNPhysicsShape.Option.type: SCNPhysicsShape.ShapeType.concavePolyhedron]))
+        
+        goalNode.physicsBody?.categoryBitMask = collisions.start.rawValue
+        goalNode.physicsBody?.collisionBitMask = collisions.ball.rawValue
+        goalNode.physicsBody?.contactTestBitMask = collisions.ball.rawValue
+        ringNode.physicsBody?.categoryBitMask = collisions.end.rawValue
+        ringNode.physicsBody?.collisionBitMask = collisions.ball.rawValue
+        ringNode.physicsBody?.contactTestBitMask = collisions.ball.rawValue
+        
         sceneView.scene.rootNode.enumerateChildNodes { node, _ in
             if node.name == "Wall" {
                 node.removeFromParentNode()
@@ -86,8 +99,7 @@ extension ViewController {
         }
         
         sceneView.scene.rootNode.addChildNode(hoopNode)
-        sceneView.scene.rootNode.addChildNode(goalNode)
-        stopDetectingPlane()
+        stopDetectPlane()
         
         isHoopPlaced = true
         score.isHidden = false
@@ -98,13 +110,13 @@ extension ViewController {
         guard let frame = sceneView.session.currentFrame else { return }
         
         let ball = SCNNode(geometry: SCNSphere(radius: 0.2))
-        ball.geometry?.firstMaterial?.diffuse.contents = UIImage(named: "SupportingFiles/art.scnassets/basketball.jpg")
+        ball.geometry?.firstMaterial?.diffuse.contents = UIImage(named: "art.scnassets/basketball.jpg")
         ball.name = "ball"
         
         let cameraTransform = SCNMatrix4(frame.camera.transform)
         ball.transform = cameraTransform
         
-        let physicsBody = SCNPhysicsBody(type: .dynamic, shape: SCNPhysicsShape(node: ball))
+        let physicsBody = SCNPhysicsBody(type: .dynamic, shape: SCNPhysicsShape(node: ball,options: [SCNPhysicsShape.Option.collisionMargin: 0.01]))
         ball.physicsBody = physicsBody
         
         let power = Float(10)
@@ -114,6 +126,11 @@ extension ViewController {
         let force = SCNVector3(x, y, z)
         
         ball.physicsBody?.applyForce(force, asImpulse: true)
+        
+        ball.categoryBitMask = collisions.ball.rawValue
+        
+        physicsBody.collisionBitMask = collisions.start.rawValue | collisions.end.rawValue | collisions.ball.rawValue
+        physicsBody.contactTestBitMask = collisions.start.rawValue | collisions.end.rawValue | collisions.ball.rawValue
         
         sceneView.scene.rootNode.addChildNode(ball)
     }
@@ -157,15 +174,11 @@ extension ViewController: ARSCNViewDelegate {
         planeCounter += 1
     }
     
-    func stopDetectingPlane() {
+    func stopDetectPlane() {
         guard let configuration = sceneView.session.configuration as? ARWorldTrackingConfiguration else { return }
-
+        
         configuration.planeDetection = []
         sceneView.session.run(configuration)
-    }
-    
-    func renderer(_ renderer: SCNSceneRenderer, updateAtTime time: TimeInterval) {
-        //TODO удалить лишние мячи (по прошествии времени, либо по опредленному количеству)
     }
 }
 
@@ -179,16 +192,22 @@ extension ViewController: SCNPhysicsContactDelegate {
             }
         }
         
-        if ballCollision == true && resultCollision == false {
-            if contact.nodeA.name! == "ball" && contact.nodeB.name! == "goal" {
+        if (ballCollision == true) && (resultCollision == false) {
+            if (contact.nodeA.name! == "ball" && contact.nodeB.name! == "ring") {
                 ballCollision.toggle()
-                resultCollision.toggle()
+   //             resultCollision.toggle()
                 
                 scores += 1
                 
                 DispatchQueue.main.async {
+                    self.topsScore = self.scores
+                    
                     self.score.text = "Scores: \(self.scores)"
+                    self.topScore.text = "Top Score: \(self.topsScore)"
+                    
+                    
                 }
+                
             }
         }
     }

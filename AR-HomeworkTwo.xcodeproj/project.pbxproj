@@ -56,6 +56,7 @@
 		4BC58D532296CC31004E8123 /* AR-HomeworkTwo */ = {
 			isa = PBXGroup;
 			children = (
+				4BC58D562296CC31004E8123 /* art.scnassets */,
 				4BC58D682296CC52004E8123 /* View */,
 				4BC58D6A2296CC69004E8123 /* SupportingFiles */,
 				4BC58D692296CC5F004E8123 /* Controller */,
@@ -86,7 +87,6 @@
 				4BC58D542296CC31004E8123 /* AppDelegate.swift */,
 				4BC58D622296CC33004E8123 /* Info.plist */,
 				4BC58D5D2296CC33004E8123 /* Assets.xcassets */,
-				4BC58D562296CC31004E8123 /* art.scnassets */,
 			);
 			name = SupportingFiles;
 			sourceTree = "<group>";
