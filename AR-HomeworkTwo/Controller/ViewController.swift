@@ -195,17 +195,16 @@ extension ViewController: SCNPhysicsContactDelegate {
         if (ballCollision == true) && (resultCollision == false) {
             if (contact.nodeA.name! == "ball" && contact.nodeB.name! == "ring") {
                 ballCollision.toggle()
-   //             resultCollision.toggle()
                 
                 scores += 1
                 
                 DispatchQueue.main.async {
-                    self.topsScore = self.scores
+                    if self.scores >= self.topsScore {
+                        self.topsScore = self.scores
+                    }
                     
                     self.score.text = "Scores: \(self.scores)"
                     self.topScore.text = "Top Score: \(self.topsScore)"
-                    
-                    
                 }
                 
             }
